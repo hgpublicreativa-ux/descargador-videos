@@ -69,21 +69,45 @@ app.post('/api/download', (req, res) => {
       return res.status(500).json({ error: 'No se encontró el archivo descargado' });
     }
 
-    res.setHeader('Content-Type', 'video/mp4');
-    res.setHeader('Content-Disposition', `attachment; filename="video_${platform.toLowerCase()}_${id}.mp4"`);
-    res.setHeader('Content-Length', fs.statSync(outputPath).size);
+    // Verificar el códec de video. QuickTime/Quick Look de Mac solo reproducen
+    // h264 y hevc. Si viene en VP9, AV1, etc., reconvertimos a h264 + aac.
+    const probe = `ffprobe -v error -select_streams v:0 -show_entries stream=codec_name -of default=nw=1:nk=1 "${outputPath}"`;
+    exec(probe, (probeErr, codecOut) => {
+      const codec = (codecOut || '').trim();
+      const compatible = ['h264', 'hevc'].includes(codec);
 
-    const stream = fs.createReadStream(outputPath);
-    stream.pipe(res);
+      if (compatible) {
+        return sendFile(outputPath);
+      }
 
-    stream.on('end', () => {
-      fs.unlink(outputPath, () => {});
+      // Reconvertir a h264 para compatibilidad con Mac
+      console.log(`Recodificando ${codec} -> h264`);
+      const fixedPath = path.join(tempDir, `video_${id}_fixed.mp4`);
+      const recode = `ffmpeg -y -i "${outputPath}" -c:v libx264 -preset veryfast -crf 23 -c:a aac -movflags +faststart "${fixedPath}"`;
+      exec(recode, { timeout: 180000 }, (recErr) => {
+        fs.unlink(outputPath, () => {});
+        if (recErr || !fs.existsSync(fixedPath)) {
+          console.error('Recode error:', recErr && recErr.message);
+          return res.status(500).json({ error: 'Error al convertir el video a formato compatible' });
+        }
+        sendFile(fixedPath);
+      });
     });
 
-    stream.on('error', (err) => {
-      console.error('Stream error:', err);
-      fs.unlink(outputPath, () => {});
-    });
+    function sendFile(filePath) {
+      res.setHeader('Content-Type', 'video/mp4');
+      res.setHeader('Content-Disposition', `attachment; filename="video_${platform.toLowerCase()}_${id}.mp4"`);
+      res.setHeader('Content-Length', fs.statSync(filePath).size);
+
+      const stream = fs.createReadStream(filePath);
+      stream.pipe(res);
+
+      stream.on('end', () => fs.unlink(filePath, () => {}));
+      stream.on('error', (err) => {
+        console.error('Stream error:', err);
+        fs.unlink(filePath, () => {});
+      });
+    }
   });
 });
 
