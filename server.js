@@ -12,6 +12,7 @@ app.use(express.json());
 app.use(express.static('public'));
 
 const tempDir = os.tmpdir();
+const ytdlp = fs.existsSync('/app/yt-dlp') ? '/app/yt-dlp' : 'yt-dlp';
 
 function detectPlatform(url) {
   if (url.includes('youtube.com') || url.includes('youtu.be')) return 'YouTube';
@@ -36,7 +37,7 @@ app.post('/api/download', (req, res) => {
   const id = crypto.randomBytes(8).toString('hex');
   const outputPath = path.join(tempDir, `video_${id}.mp4`);
 
-  const command = `yt-dlp -f "bestvideo[vcodec^=avc]+bestaudio/best[vcodec^=avc]/hd/sd/best" --merge-output-format mp4 -o "${outputPath}" "${url}"`;
+  const command = `${ytdlp} -f "bestvideo[vcodec^=avc]+bestaudio/best[vcodec^=avc]/hd/sd/best" --merge-output-format mp4 -o "${outputPath}" "${url}"`;
 
   exec(command, { timeout: 120000 }, (error, stdout, stderr) => {
     if (error) {
