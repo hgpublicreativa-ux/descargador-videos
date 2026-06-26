@@ -37,7 +37,7 @@ app.post('/api/download', (req, res) => {
   const id = crypto.randomBytes(8).toString('hex');
   const outputPath = path.join(tempDir, `video_${id}.mp4`);
 
-  const command = `${ytdlp} -f "hd/sd/bestvideo[vcodec^=avc]+bestaudio/bestvideo+bestaudio/best" --merge-output-format mp4 -o "${outputPath}" "${url}"`;
+  const command = `${ytdlp} -f "bestvideo[vcodec^=avc]+bestaudio/hd/sd/bestvideo+bestaudio/best" --merge-output-format mp4 -o "${outputPath}" "${url}"`;
 
   exec(command, { timeout: 120000 }, (error, stdout, stderr) => {
     if (error) {
