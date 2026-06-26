@@ -54,7 +54,7 @@ app.post('/api/download', (req, res) => {
   const outputPath = path.join(tempDir, `video_${id}.mp4`);
 
   const cookiesArg = cookiesFile ? `--cookies "${cookiesFile}"` : '';
-  const command = `${ytdlp} ${cookiesArg} -f "bestvideo[vcodec^=avc]+bestaudio/hd/sd/bestvideo+bestaudio/best" --merge-output-format mp4 -o "${outputPath}" "${url}"`;
+  const command = `${ytdlp} ${cookiesArg} --js-runtime nodejs -f "bestvideo[vcodec^=avc]+bestaudio/hd/sd/bestvideo+bestaudio/best" --merge-output-format mp4 -o "${outputPath}" "${url}"`;
 
   exec(command, { timeout: 120000 }, (error, stdout, stderr) => {
     if (error) {
