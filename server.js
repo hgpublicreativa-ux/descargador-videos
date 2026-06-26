@@ -14,6 +14,22 @@ app.use(express.static('public'));
 const tempDir = os.tmpdir();
 const ytdlp = fs.existsSync('/app/yt-dlp') ? '/app/yt-dlp' : 'yt-dlp';
 
+// Cookies opcionales (para Instagram y otras plataformas que exigen login).
+// Se cargan desde la variable de entorno YTDLP_COOKIES (texto del archivo
+// cookies.txt en formato Netscape, o el mismo contenido en base64).
+// Nunca se guardan en el repositorio: solo viven en Railway como variable privada.
+let cookiesFile = null;
+const cookiesEnv = process.env.YTDLP_COOKIES;
+if (cookiesEnv && cookiesEnv.trim()) {
+  let content = cookiesEnv;
+  if (!content.includes('\t') && !content.includes('# Netscape')) {
+    try { content = Buffer.from(content, 'base64').toString('utf8'); } catch (e) { /* usar tal cual */ }
+  }
+  cookiesFile = path.join(tempDir, 'cookies.txt');
+  fs.writeFileSync(cookiesFile, content);
+  console.log('🍪 Cookies cargadas para descargas autenticadas');
+}
+
 function detectPlatform(url) {
   if (url.includes('youtube.com') || url.includes('youtu.be')) return 'YouTube';
   if (url.includes('tiktok.com')) return 'TikTok';
@@ -37,7 +53,8 @@ app.post('/api/download', (req, res) => {
   const id = crypto.randomBytes(8).toString('hex');
   const outputPath = path.join(tempDir, `video_${id}.mp4`);
 
-  const command = `${ytdlp} -f "bestvideo[vcodec^=avc]+bestaudio/hd/sd/bestvideo+bestaudio/best" --merge-output-format mp4 -o "${outputPath}" "${url}"`;
+  const cookiesArg = cookiesFile ? `--cookies "${cookiesFile}"` : '';
+  const command = `${ytdlp} ${cookiesArg} -f "bestvideo[vcodec^=avc]+bestaudio/hd/sd/bestvideo+bestaudio/best" --merge-output-format mp4 -o "${outputPath}" "${url}"`;
 
   exec(command, { timeout: 120000 }, (error, stdout, stderr) => {
     if (error) {
