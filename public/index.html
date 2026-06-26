@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Descargador de Videos</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="container">
+    <div class="card">
+      <h1>🎬 Descargador de Videos</h1>
+      <p class="subtitle">YouTube • TikTok • Instagram • Facebook</p>
+
+      <form id="downloadForm">
+        <div class="input-group">
+          <input
+            type="url"
+            id="urlInput"
+            placeholder="Pega el link del video aquí..."
+            required
+            autocomplete="off"
+          >
+          <button type="submit" id="downloadBtn">
+            <span>Descargar</span>
+          </button>
+        </div>
+      </form>
+
+      <div id="status" class="status hidden"></div>
+      <div id="loader" class="loader hidden"></div>
+    </div>
+
+    <div class="info">
+      <h3>📌 Plataformas soportadas:</h3>
+      <ul>
+        <li><strong>YouTube</strong> - youtube.com, youtu.be</li>
+        <li><strong>TikTok</strong> - tiktok.com</li>
+        <li><strong>Instagram</strong> - instagram.com</li>
+        <li><strong>Facebook</strong> - facebook.com, fb.watch</li>
+      </ul>
+      <p class="note">Los videos se guardarán en tu carpeta de Descargas</p>
+    </div>
+  </div>
+
+  <script src="script.js"></script>
+</body>
+</html>

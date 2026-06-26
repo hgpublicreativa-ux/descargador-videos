@@ -1,0 +1,19 @@
+{
+  "name": "video-downloader",
+  "version": "1.0.0",
+  "description": "Video downloader for YouTube, TikTok, Instagram, Facebook",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "keywords": ["video", "downloader", "youtube", "tiktok", "instagram", "facebook"],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "express": "^4.18.2",
+    "express-fileupload": "^1.4.0",
+    "cors": "^2.8.5",
+    "dotenv": "^16.0.3"
+  }
+}
