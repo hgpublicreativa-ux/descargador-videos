@@ -54,13 +54,3 @@ form.addEventListener('submit', async (e) => {
   }
 });
 
-urlInput.addEventListener('paste', () => {
-  setTimeout(() => {
-    const url = urlInput.value.trim();
-    if (url.includes('youtube.com') || url.includes('youtu.be') ||
-        url.includes('tiktok.com') || url.includes('instagram.com') ||
-        url.includes('facebook.com') || url.includes('fb.watch')) {
-      form.dispatchEvent(new Event('submit'));
-    }
-  }, 10);
-});
