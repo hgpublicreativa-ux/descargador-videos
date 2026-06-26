@@ -3,6 +3,7 @@ const { exec } = require('child_process');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
+const crypto = require('crypto');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -10,7 +11,7 @@ const PORT = process.env.PORT || 3000;
 app.use(express.json());
 app.use(express.static('public'));
 
-const downloadDir = path.join(os.homedir(), 'Downloads');
+const tempDir = os.tmpdir();
 
 function detectPlatform(url) {
   if (url.includes('youtube.com') || url.includes('youtu.be')) return 'YouTube';
@@ -32,11 +33,12 @@ app.post('/api/download', (req, res) => {
     return res.status(400).json({ error: 'Plataforma no soportada' });
   }
 
-  const outputTemplate = path.join(downloadDir, '%(upload_date)s_%(id)s.%(ext)s');
+  const id = crypto.randomBytes(8).toString('hex');
+  const outputPath = path.join(tempDir, `video_${id}.mp4`);
 
-  const command = `yt-dlp -f "bestvideo[vcodec^=avc]+bestaudio/best[vcodec^=avc]/hd/sd/best" --merge-output-format mp4 -o "${outputTemplate}" "${url}"`;
+  const command = `yt-dlp -f "bestvideo[vcodec^=avc]+bestaudio/best[vcodec^=avc]/hd/sd/best" --merge-output-format mp4 -o "${outputPath}" "${url}"`;
 
-  exec(command, (error, stdout, stderr) => {
+  exec(command, { timeout: 120000 }, (error, stdout, stderr) => {
     if (error) {
       console.error(`Error: ${error.message}`);
       return res.status(500).json({
@@ -45,27 +47,28 @@ app.post('/api/download', (req, res) => {
       });
     }
 
-    const match = stdout.match(/\[download\] Destination: (.+)/);
-    const filePath = match ? match[1] : null;
-
-    if (filePath && fs.existsSync(filePath)) {
-      res.json({
-        success: true,
-        platform,
-        message: `Video de ${platform} descargado en Descargas`,
-        filePath
-      });
-    } else {
-      res.json({
-        success: true,
-        platform,
-        message: `Video de ${platform} descargado en tu carpeta de Descargas`
-      });
+    if (!fs.existsSync(outputPath)) {
+      return res.status(500).json({ error: 'No se encontró el archivo descargado' });
     }
+
+    res.setHeader('Content-Type', 'video/mp4');
+    res.setHeader('Content-Disposition', `attachment; filename="video_${platform.toLowerCase()}_${id}.mp4"`);
+    res.setHeader('Content-Length', fs.statSync(outputPath).size);
+
+    const stream = fs.createReadStream(outputPath);
+    stream.pipe(res);
+
+    stream.on('end', () => {
+      fs.unlink(outputPath, () => {});
+    });
+
+    stream.on('error', (err) => {
+      console.error('Stream error:', err);
+      fs.unlink(outputPath, () => {});
+    });
   });
 });
 
 app.listen(PORT, () => {
-  console.log(`\n🎬 Descargador de videos corriendo en http://localhost:${PORT}`);
-  console.log(`📁 Los videos se guardarán en: ${downloadDir}\n`);
+  console.log(`\n🎬 Descargador de videos corriendo en http://localhost:${PORT}\n`);
 });

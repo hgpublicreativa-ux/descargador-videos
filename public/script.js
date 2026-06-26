@@ -18,40 +18,43 @@ form.addEventListener('submit', async (e) => {
   try {
     const response = await fetch('/api/download', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ url })
     });
 
-    const data = await response.json();
+    if (!response.ok) {
+      const data = await response.json();
+      throw new Error(data.error || 'Error al descargar');
+    }
+
+    const blob = await response.blob();
+    const disposition = response.headers.get('Content-Disposition') || '';
+    const match = disposition.match(/filename="(.+?)"/);
+    const filename = match ? match[1] : 'video.mp4';
+
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(a.href);
 
     loader.classList.add('hidden');
+    status.classList.remove('hidden', 'error', 'info');
+    status.classList.add('success');
+    status.innerHTML = `✅ <strong>Video descargado correctamente</strong>`;
+    urlInput.value = '';
 
-    if (response.ok) {
-      status.classList.remove('hidden', 'error', 'info');
-      status.classList.add('success');
-      status.innerHTML = `
-        ✅ <strong>${data.platform}</strong><br>
-        ${data.message}
-      `;
-      urlInput.value = '';
-    } else {
-      status.classList.remove('hidden', 'success', 'info');
-      status.classList.add('error');
-      status.innerHTML = `❌ ${data.error}`;
-    }
   } catch (error) {
     loader.classList.add('hidden');
     status.classList.remove('hidden', 'success', 'info');
     status.classList.add('error');
-    status.innerHTML = `❌ Error de conexión: ${error.message}`;
+    status.innerHTML = `❌ ${error.message}`;
   } finally {
     downloadBtn.disabled = false;
   }
 });
 
-urlInput.addEventListener('paste', (e) => {
+urlInput.addEventListener('paste', () => {
   setTimeout(() => {
     const url = urlInput.value.trim();
     if (url.includes('youtube.com') || url.includes('youtu.be') ||
