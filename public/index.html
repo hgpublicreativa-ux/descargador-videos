@@ -13,22 +13,27 @@
       <p class="subtitle">YouTube • TikTok • Instagram • Facebook</p>
 
       <form id="downloadForm">
-        <div class="input-group">
-          <input
-            type="url"
-            id="urlInput"
-            placeholder="Pega el link del video aquí..."
-            required
-            autocomplete="off"
-          >
-          <button type="submit" id="downloadBtn">
-            <span>Descargar</span>
-          </button>
-        </div>
+        <textarea
+          id="urlInput"
+          placeholder="Pega uno o más links aquí, uno por línea...&#10;https://youtube.com/...&#10;https://tiktok.com/...&#10;https://instagram.com/..."
+          autocomplete="off"
+          rows="4"
+        ></textarea>
+        <button type="submit" id="downloadBtn">
+          <span>Agregar a la cola</span>
+        </button>
       </form>
 
       <div id="status" class="status hidden"></div>
-      <div id="loader" class="loader hidden"></div>
+
+      <div id="queueSection" class="queue-section hidden">
+        <div class="queue-header">
+          <h3>Cola de descargas</h3>
+          <span id="queueProgress" class="queue-progress"></span>
+        </div>
+        <ul id="queueList" class="queue-list"></ul>
+        <button type="button" id="clearQueueBtn" class="clear-btn hidden">Limpiar completados</button>
+      </div>
     </div>
 
     <div class="info">
@@ -39,7 +44,7 @@
         <li><strong>Instagram</strong> - instagram.com</li>
         <li><strong>Facebook</strong> - facebook.com, fb.watch</li>
       </ul>
-      <p class="note">Los videos se guardarán en tu carpeta de Descargas</p>
+      <p class="note">Los videos se guardarán en tu carpeta de Descargas. Puedes pegar varios links y se descargarán uno por uno.</p>
     </div>
   </div>
 
