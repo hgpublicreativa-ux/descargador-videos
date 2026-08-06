@@ -9,10 +9,18 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 app.use(express.json());
-app.use(express.static('public'));
+app.use(express.static(path.join(__dirname, 'public')));
 
 const tempDir = os.tmpdir();
-const ytdlp = fs.existsSync('/app/yt-dlp') ? '/app/yt-dlp' : 'yt-dlp';
+// YTDLP_PATH/FFMPEG_PATH/FFPROBE_PATH: usados por la app de escritorio (Electron) para
+// apuntar a los binarios empaquetados dentro del .app. Sin definir, cae en el binario
+// instalado en Railway (/app/yt-dlp) o en el PATH del sistema (Homebrew local).
+const ytdlp = process.env.YTDLP_PATH || (fs.existsSync('/app/yt-dlp') ? '/app/yt-dlp' : 'yt-dlp');
+const ffmpegBin = process.env.FFMPEG_PATH || 'ffmpeg';
+const ffprobeBin = process.env.FFPROBE_PATH || 'ffprobe';
+// HOST: la app de escritorio fuerza 127.0.0.1 para no exponer el server en la red local.
+// Railway necesita todas las interfaces, que es el default.
+const HOST = process.env.HOST || '0.0.0.0';
 
 // Cookies opcionales (para Instagram y otras plataformas que exigen login).
 // Se cargan desde la variable de entorno YTDLP_COOKIES (texto del archivo
@@ -67,7 +75,7 @@ app.post('/api/download', (req, res) => {
   // es una recompresión con pérdida. Luego bitrate y tamaño como desempate.
   const sortArg = '-S "res,fps,vcodec:h264,br,size"';
 
-  const command = `${ytdlp} ${cookiesArg} --js-runtime nodejs ${formatArg} ${sortArg} --merge-output-format mp4 -o "${outputPath}" "${url}"`;
+  const command = `"${ytdlp}" ${cookiesArg} --js-runtime node ${formatArg} ${sortArg} --merge-output-format mp4 -o "${outputPath}" "${url}"`;
 
   exec(command, { timeout: 120000 }, (error, stdout, stderr) => {
     if (error) {
@@ -84,7 +92,7 @@ app.post('/api/download', (req, res) => {
 
     // Verificar el códec de video. QuickTime/Quick Look de Mac solo reproducen
     // h264 y hevc. Si viene en VP9, AV1, etc., reconvertimos a h264 + aac.
-    const probe = `ffprobe -v error -select_streams v:0 -show_entries stream=codec_name -of default=nw=1:nk=1 "${outputPath}"`;
+    const probe = `"${ffprobeBin}" -v error -select_streams v:0 -show_entries stream=codec_name -of default=nw=1:nk=1 "${outputPath}"`;
     exec(probe, (probeErr, codecOut) => {
       const codec = (codecOut || '').trim();
       const compatible = ['h264', 'hevc'].includes(codec);
@@ -96,7 +104,7 @@ app.post('/api/download', (req, res) => {
       // Reconvertir a h264 para compatibilidad con Mac
       console.log(`Recodificando ${codec} -> h264`);
       const fixedPath = path.join(tempDir, `video_${id}_fixed.mp4`);
-      const recode = `ffmpeg -y -i "${outputPath}" -c:v libx264 -preset veryfast -crf 23 -c:a aac -movflags +faststart "${fixedPath}"`;
+      const recode = `"${ffmpegBin}" -y -i "${outputPath}" -c:v libx264 -preset veryfast -crf 23 -c:a aac -movflags +faststart "${fixedPath}"`;
       exec(recode, { timeout: 180000 }, (recErr) => {
         fs.unlink(outputPath, () => {});
         if (recErr || !fs.existsSync(fixedPath)) {
@@ -124,6 +132,6 @@ app.post('/api/download', (req, res) => {
   });
 });
 
-app.listen(PORT, () => {
+app.listen(PORT, HOST, () => {
   console.log(`\n🎬 Descargador de videos corriendo en http://localhost:${PORT}\n`);
 });
