@@ -54,7 +54,20 @@ app.post('/api/download', (req, res) => {
   const outputPath = path.join(tempDir, `video_${id}.mp4`);
 
   const cookiesArg = cookiesFile ? `--cookies "${cookiesFile}"` : '';
-  const command = `${ytdlp} ${cookiesArg} --js-runtime nodejs -f "bestvideo[vcodec^=avc]+bestaudio/hd/sd/bestvideo+bestaudio/best" --merge-output-format mp4 -o "${outputPath}" "${url}"`;
+
+  // Selección de formato para máxima calidad final (no solo máxima calidad de descarga).
+  // - bv*+ba: mejor vídeo + mejor audio por separado; b: formato único (TikTok/Instagram
+  //   sirven todo muxeado, así que ahí siempre cae en "b").
+  // - bytevc2 es el códec propio de ByteDance (h266/VVC): ni QuickTime ni ffmpeg lo
+  //   decodifican, así que se excluye o la descarga acaba en un archivo inservible.
+  const formatArg = '-f "bv*[vcodec!=bytevc2]+ba/b[vcodec!=bytevc2]/bv*+ba/b"';
+
+  // Orden de preferencia: resolución y fps mandan (es lo que pide el usuario), pero a
+  // igualdad de resolución preferimos h264 porque evita el recode posterior a h264, que
+  // es una recompresión con pérdida. Luego bitrate y tamaño como desempate.
+  const sortArg = '-S "res,fps,vcodec:h264,br,size"';
+
+  const command = `${ytdlp} ${cookiesArg} --js-runtime nodejs ${formatArg} ${sortArg} --merge-output-format mp4 -o "${outputPath}" "${url}"`;
 
   exec(command, { timeout: 120000 }, (error, stdout, stderr) => {
     if (error) {
