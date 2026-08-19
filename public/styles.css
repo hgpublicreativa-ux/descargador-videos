@@ -246,6 +246,24 @@ h1 {
   text-overflow: ellipsis;
 }
 
+.queue-retry {
+  flex-shrink: 0;
+  background: none;
+  border: 1px solid #e74c3c;
+  color: #e74c3c;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 4px 10px;
+  border-radius: 6px;
+  transition: all 0.2s;
+}
+
+.queue-retry:hover {
+  background: #e74c3c;
+  color: white;
+}
+
 .queue-remove {
   flex-shrink: 0;
   background: none;

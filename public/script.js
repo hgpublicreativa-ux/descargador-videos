@@ -10,6 +10,11 @@ const clearQueueBtn = document.getElementById('clearQueueBtn');
 const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
 const supportsWebShare = navigator.share && isMobile;
 
+const MAX_AUTO_RETRIES = 3;
+const RETRY_DELAY_MS = 1500;
+
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
 // Cada item: { id, url, state: 'esperando'|'descargando'|'completado'|'error', message }
 let queue = [];
 let processing = false;
@@ -67,6 +72,7 @@ function renderQueue() {
       <span class="queue-icon">${info.icon}</span>
       <span class="queue-url" title="${escapeHtml(item.url)}">${escapeHtml(item.url)}</span>
       <span class="queue-state">${item.message ? escapeHtml(item.message) : info.text}</span>
+      ${item.state === 'error' ? `<button type="button" class="queue-retry" data-id="${item.id}">Reintentar</button>` : ''}
       ${canRemove ? `<button type="button" class="queue-remove" data-id="${item.id}" aria-label="Quitar">✕</button>` : ''}
     `;
 
@@ -78,6 +84,18 @@ function renderQueue() {
       const id = Number(btn.dataset.id);
       queue = queue.filter((item) => item.id !== id);
       renderQueue();
+    });
+  });
+
+  queueList.querySelectorAll('.queue-retry').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const id = Number(btn.dataset.id);
+      const item = queue.find((i) => i.id === id);
+      if (!item) return;
+      item.state = 'esperando';
+      item.message = '';
+      renderQueue();
+      processQueue();
     });
   });
 
@@ -105,13 +123,31 @@ async function processQueue() {
     next.message = '';
     renderQueue();
 
-    try {
-      await downloadOne(next.url);
+    let lastError = null;
+    let success = false;
+
+    for (let attempt = 1; attempt <= MAX_AUTO_RETRIES && !success; attempt++) {
+      if (attempt > 1) {
+        next.message = `Reintentando… (${attempt}/${MAX_AUTO_RETRIES})`;
+        renderQueue();
+        await sleep(RETRY_DELAY_MS);
+      }
+      try {
+        await downloadOne(next.url);
+        success = true;
+      } catch (err) {
+        lastError = err;
+        // Errores de validación (URL/plataforma inválida) son permanentes: no reintentar.
+        if (err.retryable === false) break;
+      }
+    }
+
+    if (success) {
       next.state = 'completado';
       next.message = '';
-    } catch (err) {
+    } else {
       next.state = 'error';
-      next.message = err.message || 'Error al descargar';
+      next.message = (lastError && lastError.message) || 'Error al descargar';
     }
 
     renderQueue();
@@ -129,7 +165,10 @@ async function downloadOne(url) {
 
   if (!response.ok) {
     const data = await response.json().catch(() => ({}));
-    throw new Error(data.error || 'Error al descargar');
+    const error = new Error(data.error || 'Error al descargar');
+    // 4xx = URL o plataforma inválida: no cambia entre reintentos, no vale la pena reintentar.
+    error.retryable = response.status >= 500;
+    throw error;
   }
 
   const blob = await response.blob();

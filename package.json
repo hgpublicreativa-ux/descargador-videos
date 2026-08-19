@@ -2,18 +2,75 @@
   "name": "video-downloader",
   "version": "1.0.0",
   "description": "Video downloader for YouTube, TikTok, Instagram, Facebook",
-  "main": "server.js",
+  "main": "main.js",
   "scripts": {
     "start": "node server.js",
-    "dev": "node server.js"
+    "dev": "node server.js",
+    "electron": "electron .",
+    "dist": "electron-builder --mac"
   },
-  "keywords": ["video", "downloader", "youtube", "tiktok", "instagram", "facebook"],
+  "keywords": [
+    "video",
+    "downloader",
+    "youtube",
+    "tiktok",
+    "instagram",
+    "facebook"
+  ],
   "author": "",
   "license": "MIT",
   "dependencies": {
-    "express": "^4.18.2",
-    "express-fileupload": "^1.4.0",
     "cors": "^2.8.5",
-    "dotenv": "^16.0.3"
+    "dotenv": "^16.0.3",
+    "express": "^4.18.2",
+    "express-fileupload": "^1.4.0"
+  },
+  "devDependencies": {
+    "electron": "^43.3.0",
+    "electron-builder": "^26.15.3"
+  },
+  "build": {
+    "appId": "com.henricito.descargadorvideos",
+    "productName": "Descargador de Videos",
+    "files": [
+      "**/*",
+      "!resources/bin/**",
+      "!build/icon.iconset/**",
+      "!dist/**"
+    ],
+    "extraResources": [
+      {
+        "from": "resources/bin/yt-dlp",
+        "to": "bin/yt-dlp"
+      },
+      {
+        "from": "resources/bin/${arch}/ffmpeg",
+        "to": "bin/ffmpeg"
+      },
+      {
+        "from": "resources/bin/${arch}/ffprobe",
+        "to": "bin/ffprobe"
+      }
+    ],
+    "directories": {
+      "buildResources": "build",
+      "output": "dist"
+    },
+    "mac": {
+      "icon": "build/icon.icns",
+      "category": "public.app-category.utilities",
+      "identity": null,
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "universal"
+          ]
+        }
+      ]
+    },
+    "dmg": {
+      "title": "Descargador de Videos"
+    }
   }
 }
