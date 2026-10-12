@@ -182,8 +182,13 @@ app.post('/api/download', (req, res) => {
   // hace falta recode. Audio m4a (aac) primero para que suene en QuickTime/iPhone.
   const sortArgs = ['-S', 'res:1080,fps,vcodec:h264,acodec:aac,br,size'];
 
+  // La app de escritorio abierta desde Finder no tiene ffmpeg en el PATH: sin indicarle a
+  // yt-dlp dónde está el empaquetado, baja vídeo y audio por separado (YouTube) y no puede
+  // unirlos, así que termina "bien" pero sin archivo final.
+  const ffmpegArgs = path.isAbsolute(ffmpegBin) ? ['--ffmpeg-location', path.dirname(ffmpegBin)] : [];
+
   const buildArgs = (authArgs) => [
-    ...cookiesArgs, ...authArgs, ...headersArgs, ...jsRuntimeArgs, ...formatArgs, ...sortArgs,
+    ...cookiesArgs, ...authArgs, ...headersArgs, ...jsRuntimeArgs, ...ffmpegArgs, ...formatArgs, ...sortArgs,
     '--no-playlist', '--no-progress', '--merge-output-format', 'mp4', '-o', outputPath,
     '--', url,
   ];
