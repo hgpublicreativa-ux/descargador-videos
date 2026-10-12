@@ -40,8 +40,8 @@
     ],
     "extraResources": [
       {
-        "from": "resources/bin/yt-dlp",
-        "to": "bin/yt-dlp"
+        "from": "resources/bin/yt-dlp_macos",
+        "to": "bin/yt-dlp_macos"
       },
       {
         "from": "resources/bin/${arch}/ffmpeg",

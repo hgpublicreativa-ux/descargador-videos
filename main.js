@@ -2,6 +2,7 @@ const { app, BrowserWindow, Menu, shell, session } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const http = require('http');
+const { execFile } = require('child_process');
 const { resolveYtdlp, maybeUpdate } = require('./updater');
 
 const PORT = 51739;
@@ -15,7 +16,7 @@ function resolveBinary(name) {
     if (fs.existsSync(p)) return p;
   }
   // Desarrollo: usa los binarios descargados en resources/bin/<arch>/ del repo
-  // (yt-dlp vive suelto en resources/bin/ porque ya es universal).
+  // (yt-dlp vive en resources/bin/yt-dlp_macos/ porque ya es universal).
   const devArchDir = path.join(__dirname, 'resources', 'bin', process.arch, name);
   const devFlat = path.join(__dirname, 'resources', 'bin', name);
   if (fs.existsSync(devArchDir)) return devArchDir;
@@ -106,7 +107,11 @@ function buildMenu() {
 app.whenReady().then(async () => {
   process.env.HOST = HOST;
   process.env.PORT = String(PORT);
-  const bundledYtdlp = resolveBinary('yt-dlp');
+  // yt-dlp va en su versión "carpeta" (yt-dlp_macos/yt-dlp_macos + _internal/). La de un
+  // solo archivo se descomprime en una carpeta temporal nueva en cada ejecución y macOS la
+  // vuelve a revisar entera cada vez: ~30 s de espera antes de cada descarga. La de carpeta
+  // solo se revisa la primera vez y luego arranca en menos de un segundo.
+  const bundledYtdlp = resolveBinary(path.join('yt-dlp_macos', 'yt-dlp_macos'));
   const userDataDir = app.getPath('userData');
   // Si ya hay una copia descargada más nueva en userData, esa manda sobre la empaquetada.
   process.env.YTDLP_PATH = resolveYtdlp(bundledYtdlp, userDataDir);
@@ -156,6 +161,11 @@ app.whenReady().then(async () => {
 
   // Sin await a propósito: la ventana ya está abierta y la descarga (38 MB) no debe
   // retrasar el arranque. Lo que se baje entra en vigor en el siguiente arranque.
+  // La primera ejecución de un yt-dlp nuevo tarda (macOS lo revisa una sola vez). Se lanza
+  // ya en segundo plano para que esa espera ocurra mientras el usuario pega el link y no
+  // en su primera descarga.
+  execFile(process.env.YTDLP_PATH, ['--version'], { timeout: 180000 }, () => {});
+
   maybeUpdate({
     userDataDir,
     currentBinPath: process.env.YTDLP_PATH,

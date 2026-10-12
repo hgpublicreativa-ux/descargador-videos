@@ -16,7 +16,9 @@ const crypto = require('crypto');
 const { execFile } = require('child_process');
 
 const RELEASE_API = 'https://api.github.com/repos/yt-dlp/yt-dlp/releases/latest';
-const ASSET_NAME = 'yt-dlp_macos';
+// Versión "carpeta" (zip con yt-dlp_macos + _internal/): la de un solo archivo tarda ~30 s
+// en arrancar en cada ejecución porque macOS revisa de nuevo todo lo que descomprime.
+const ASSET_NAME = 'yt-dlp_macos.zip';
 const SUMS_NAME = 'SHA2-256SUMS';
 const CHECK_INTERVAL_MS = 24 * 60 * 60 * 1000;
 // GitHub rechaza las peticiones sin User-Agent.
@@ -64,14 +66,29 @@ async function downloadTo(url, dest) {
 
 function versionOf(binPath) {
   return new Promise((resolve) => {
-    execFile(binPath, ['--version'], { timeout: 30000 }, (err, stdout) => {
+    // Margen amplio: la primera ejecución de un binario nuevo espera a que macOS lo revise.
+    execFile(binPath, ['--version'], { timeout: 180000 }, (err, stdout) => {
       resolve(err ? null : (stdout || '').trim());
     });
   });
 }
 
+function managedDir(userDataDir) {
+  return path.join(userDataDir, 'bin', 'yt-dlp_macos');
+}
+
 function managedPath(userDataDir) {
-  return path.join(userDataDir, 'bin', 'yt-dlp');
+  return path.join(managedDir(userDataDir), 'yt-dlp_macos');
+}
+
+function unzip(zipPath, destDir) {
+  return new Promise((resolve, reject) => {
+    // ditto viene con macOS y conserva permisos y enlaces simbólicos del zip.
+    execFile('/usr/bin/ditto', ['-x', '-k', zipPath, destDir], { timeout: 120000 }, (err) => {
+      if (err) reject(new Error(`No se pudo descomprimir: ${err.message}`));
+      else resolve();
+    });
+  });
 }
 
 // Qué binario usar en este arranque. La copia descargada manda; si no existe o no es
@@ -134,25 +151,41 @@ async function maybeUpdate({ userDataDir, currentBinPath, log = () => {}, force 
 
     const binDir = path.join(userDataDir, 'bin');
     fs.mkdirSync(binDir, { recursive: true });
-    const tmp = path.join(binDir, 'yt-dlp.part');
+    const zipTmp = path.join(binDir, 'yt-dlp_macos.zip.part');
+    const staging = path.join(binDir, 'yt-dlp_macos.nuevo');
+    // Restos de un intento anterior interrumpido (son copias propias de la app, no del usuario).
+    fs.rmSync(staging, { recursive: true, force: true });
 
-    const actual = await downloadTo(asset.browser_download_url, tmp);
+    const actual = await downloadTo(asset.browser_download_url, zipTmp);
     if (actual !== expected) {
-      fs.unlinkSync(tmp);
+      fs.unlinkSync(zipTmp);
       throw new Error(`sha256 no coincide (esperado ${expected.slice(0, 12)}…, obtenido ${actual.slice(0, 12)}…)`);
     }
 
-    fs.chmodSync(tmp, 0o755);
+    try {
+      await unzip(zipTmp, staging);
+    } finally {
+      fs.unlinkSync(zipTmp);
+    }
 
     // Antes de promoverlo: que arranque de verdad. Un binario corrupto o bloqueado por
-    // Gatekeeper dejaría la app peor de lo que estaba.
-    const check = await versionOf(tmp);
+    // Gatekeeper dejaría la app peor de lo que estaba. De paso, esta primera ejecución
+    // absorbe la revisión de macOS para que no la sufra la primera descarga.
+    const check = await versionOf(path.join(staging, 'yt-dlp_macos'));
     if (!check) {
-      fs.unlinkSync(tmp);
+      fs.rmSync(staging, { recursive: true, force: true });
       throw new Error('El binario descargado no se ejecuta');
     }
 
-    fs.renameSync(tmp, managedPath(userDataDir));
+    // Cambio de carpeta: la anterior se aparta, la nueva ocupa su sitio y luego se borra la
+    // anterior. Así nunca hay un momento sin un yt-dlp válido en la ruta gestionada.
+    const target = managedDir(userDataDir);
+    const previous = `${target}.anterior`;
+    fs.rmSync(previous, { recursive: true, force: true });
+    if (fs.existsSync(target)) fs.renameSync(target, previous);
+    fs.renameSync(staging, target);
+    fs.rmSync(previous, { recursive: true, force: true });
+
     fs.writeFileSync(statePath, JSON.stringify({ lastCheck: Date.now(), latest, current: check }));
     log(`yt-dlp actualizado a ${check}; se usará en el próximo arranque`);
     return { updated: true, version: check };
@@ -163,4 +196,4 @@ async function maybeUpdate({ userDataDir, currentBinPath, log = () => {}, force 
   }
 }
 
-module.exports = { resolveYtdlp, maybeUpdate, managedPath };
+module.exports = { resolveYtdlp, maybeUpdate, managedPath, managedDir };
