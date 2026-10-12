@@ -8,7 +8,7 @@ const queueProgress = document.getElementById('queueProgress');
 const clearQueueBtn = document.getElementById('clearQueueBtn');
 
 const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-const supportsWebShare = navigator.share && isMobile;
+const supportsWebShare = () => !!navigator.share && isMobile;
 
 const MAX_AUTO_RETRIES = 3;
 const RETRY_DELAY_MS = 1500;
@@ -73,6 +73,7 @@ function renderQueue() {
       <span class="queue-url" title="${escapeHtml(item.url)}">${escapeHtml(item.url)}</span>
       <span class="queue-state">${item.message ? escapeHtml(item.message) : info.text}</span>
       ${item.state === 'error' ? `<button type="button" class="queue-retry" data-id="${item.id}">Reintentar</button>` : ''}
+      ${item.file ? `<button type="button" class="queue-retry queue-save" data-id="${item.id}">Guardar</button>` : ''}
       ${canRemove ? `<button type="button" class="queue-remove" data-id="${item.id}" aria-label="Quitar">✕</button>` : ''}
     `;
 
@@ -96,6 +97,23 @@ function renderQueue() {
       item.message = '';
       renderQueue();
       processQueue();
+    });
+  });
+
+  // En móvil el navegador solo deja compartir justo después de un toque del usuario, y la
+  // descarga tarda: por eso el botón "Guardar" abre el menú de compartir (Guardar video).
+  queueList.querySelectorAll('.queue-save').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      const item = queue.find((i) => i.id === Number(btn.dataset.id));
+      if (!item || !item.file) return;
+      try {
+        await navigator.share({ files: [item.file], title: 'Guardar video' });
+        item.file = null;
+        item.message = '';
+        renderQueue();
+      } catch (err) {
+        if (err.name !== 'AbortError') descargarArchivo(item.file, item.file.name);
+      }
     });
   });
 
@@ -133,7 +151,11 @@ async function processQueue() {
         await sleep(RETRY_DELAY_MS);
       }
       try {
-        await downloadOne(next.url);
+        const pendingFile = await downloadOne(next.url);
+        if (pendingFile) {
+          next.file = pendingFile;
+          next.message = 'Listo: toca Guardar';
+        }
         success = true;
       } catch (err) {
         lastError = err;
@@ -144,7 +166,7 @@ async function processQueue() {
 
     if (success) {
       next.state = 'completado';
-      next.message = '';
+      if (!next.file) next.message = '';
     } else {
       next.state = 'error';
       next.message = (lastError && lastError.message) || 'Error al descargar';
@@ -165,9 +187,12 @@ async function downloadOne(url) {
 
   if (!response.ok) {
     const data = await response.json().catch(() => ({}));
-    const error = new Error(data.error || 'Error al descargar');
+    const fallback = response.status === 502 || response.status === 504
+      ? 'El servidor tardó demasiado. Prueba con un video más corto.'
+      : `Error al descargar (código ${response.status})`;
+    const error = new Error(data.error || fallback);
     // 4xx = URL o plataforma inválida: no cambia entre reintentos, no vale la pena reintentar.
-    error.retryable = response.status >= 500;
+    error.retryable = response.status >= 500 && data.retryable !== false;
     throw error;
   }
 
@@ -176,23 +201,32 @@ async function downloadOne(url) {
   const match = disposition.match(/filename="(.+?)"/);
   const filename = match ? match[1] : 'video.mp4';
 
-  if (supportsWebShare) {
-    try {
-      const file = new File([blob], filename, { type: 'video/mp4' });
-      await navigator.share({ files: [file], title: 'Guardar video', text: filename });
-      return;
-    } catch (shareErr) {
-      // si el usuario cancela o falla, usar descarga estándar
+  if (supportsWebShare()) {
+    const file = new File([blob], filename, { type: 'video/mp4' });
+    if (!navigator.canShare || navigator.canShare({ files: [file] })) {
+      try {
+        await navigator.share({ files: [file], title: 'Guardar video' });
+        return null;
+      } catch (shareErr) {
+        if (shareErr.name === 'AbortError') return null; // el usuario canceló
+        // NotAllowedError: pasó demasiado tiempo desde el toque del usuario. Se deja el
+        // archivo pendiente para que lo guarde con el botón "Guardar".
+        if (shareErr.name === 'NotAllowedError') return file;
+      }
     }
   }
 
   descargarArchivo(blob, filename);
+  return null;
 }
 
 function descargarArchivo(blob, filename) {
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
   a.download = filename;
+  document.body.appendChild(a);
   a.click();
-  URL.revokeObjectURL(a.href);
+  a.remove();
+  // Esperar antes de liberar el blob: Safari y Firefox lo necesitan para iniciar la descarga.
+  setTimeout(() => URL.revokeObjectURL(a.href), 60000);
 }

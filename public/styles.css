@@ -264,6 +264,17 @@ h1 {
   color: white;
 }
 
+.queue-save {
+  border-color: #667eea;
+  background: #667eea;
+  color: white;
+}
+
+.queue-save:hover {
+  background: #5568d3;
+  color: white;
+}
+
 .queue-remove {
   flex-shrink: 0;
   background: none;
